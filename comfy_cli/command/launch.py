@@ -8,7 +8,7 @@ import threading
 import uuid
 
 import typer
-from rich import print
+import rich
 from rich.console import Console
 from rich.panel import Panel
 
@@ -44,7 +44,7 @@ def launch_comfyui(extra):
             res = subprocess.run([sys.executable, "main.py"] + extra, env=new_env, check=False)
 
             if reboot_path is None:
-                print("[bold red]ComfyUI is not installed.[/bold red]\n")
+                rich.print("[bold red]ComfyUI is not installed.[/bold red]\n")
                 exit(res)
 
             if not os.path.exists(reboot_path):
@@ -56,12 +56,20 @@ def launch_comfyui(extra):
         def redirector_stderr():
             while True:
                 if process is not None:
-                    print(process.stderr.readline(), end="")
+                    line = process.stderr.readline()
+                    try:
+                        rich.print(line, end="")
+                    except Exception as e:
+                        print(line)
 
         def redirector_stdout():
             while True:
                 if process is not None:
-                    print(process.stdout.readline(), end="")
+                    line = process.stdout.readline()
+                    try:
+                        rich.print(line, end="")
+                    except Exception as e:
+                        print(line)
 
         threading.Thread(target=redirector_stderr).start()
         threading.Thread(target=redirector_stdout).start()
@@ -92,7 +100,7 @@ def launch_comfyui(extra):
                 process.wait()
 
                 if reboot_path is None:
-                    print("[bold red]ComfyUI is not installed.[/bold red]\n")
+                    rich.print("[bold red]ComfyUI is not installed.[/bold red]\n")
                     os._exit(process.pid)
 
                 if not os.path.exists(reboot_path):
@@ -112,7 +120,7 @@ def launch(
     resolved_workspace = workspace_manager.workspace_path
 
     if not resolved_workspace:
-        print(
+        rich.print(
             "\nComfyUI is not available.\nTo install ComfyUI, you can run:\n\n\tcomfy install\n\n",
             file=sys.stderr,
         )
@@ -126,7 +134,7 @@ def launch(
         if launch_extras != "":
             extra = launch_extras.split(" ")
 
-    print(f"\nLaunching ComfyUI from: {resolved_workspace}\n")
+    rich.print(f"\nLaunching ComfyUI from: {resolved_workspace}\n")
 
     # Update the recent workspace
     workspace_manager.set_recent_workspace(resolved_workspace)
@@ -141,7 +149,7 @@ def launch(
 def background_launch(extra):
     config_background = ConfigManager().background
     if config_background is not None and utils.is_running(config_background[2]):
-        console.print(
+        console.rich.print(
             "[bold red]ComfyUI is already running in background.\nYou cannot start more than one background service.[/bold red]\n"
         )
         raise typer.Exit(code=1)
@@ -162,7 +170,7 @@ def background_launch(extra):
         extra = []
 
     if check_comfy_server_running(port):
-        console.print(
+        console.rich.print(
             f"[bold red]The {port} port is already in use. A new ComfyUI server cannot be launched.\n[bold red]\n"
         )
         raise typer.Exit(code=1)
@@ -177,7 +185,7 @@ def background_launch(extra):
     log = loop.run_until_complete(launch_and_monitor(cmd, listen, port))
 
     if log is not None:
-        console.print(
+        console.rich.print(
             Panel(
                 "".join(log),
                 title="[bold red]Error log during ComfyUI execution[/bold red]",
@@ -185,7 +193,7 @@ def background_launch(extra):
             )
         )
 
-    console.print("\n[bold red]Execution error: failed to launch ComfyUI[/bold red]\n")
+    console.rich.print("\n[bold red]Execution error: failed to launch ComfyUI[/bold red]\n")
     # NOTE: os.exit(0) doesn't work
     os._exit(1)
 
@@ -232,10 +240,11 @@ async def launch_and_monitor(cmd, listen, port):
 
         while True:
             line = stream.readline()
+            print(line.strip('\n'))
             if "Launching ComfyUI from:" in line:
                 logging_flag = True
             elif "To see the GUI go to:" in line:
-                print(
+                rich.print(
                     f"[bold yellow]ComfyUI is successfully launched in the background.[/bold yellow]\nTo see the GUI go to: http://{listen}:{port}"
                 )
                 ConfigManager().config["DEFAULT"][constants.CONFIG_KEY_BACKGROUND] = f"{(listen, port, process.pid)}"
