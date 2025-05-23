@@ -64,6 +64,7 @@ def execute(workflow: str, host, port, wait=True, verbose=False, local_paths=Fal
     else:
         print(f"Queuing workflow: {workflow_name}")
 
+    print(f"WorkflowExecution. host: {host}, port: {port}, verbose: {verbose}, local_paths: {local_paths}, timeout: {timeout}")
     execution = WorkflowExecution(workflow, host, port, verbose, progress, local_paths, timeout)
 
     try:
