@@ -140,6 +140,13 @@ class WorkflowExecution:
         req = request.Request(f"http://{self.host}:{self.port}/prompt", json.dumps(data).encode("utf-8"))
         try:
             print(f"Request: {req}")
+            print("URL:", req.full_url)
+            print("Method:", req.get_method())
+            print("Headers:", dict(req.header_items()))
+            print("Data (body):", req.data)
+            print("Host:", req.host)
+            print("Origin req host:", req.origin_req_host)
+            print("Unredirected headers:", req.unredirected_hdrs)
             resp = request.urlopen(req)
             body = json.loads(resp.read())
 
