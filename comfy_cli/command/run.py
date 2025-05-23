@@ -139,7 +139,7 @@ class WorkflowExecution:
         data = {"prompt": self.workflow, "client_id": self.client_id}
         req = request.Request(f"http://{self.host}:{self.port}/prompt", json.dumps(data).encode("utf-8"))
         try:
-            logger.debug(f"Request: {req}")
+            print(f"Request: {req}")
             resp = request.urlopen(req)
             body = json.loads(resp.read())
 
