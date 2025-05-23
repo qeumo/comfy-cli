@@ -9,6 +9,7 @@ import uuid
 from datetime import timedelta
 from urllib import request
 
+import joblib
 import typer
 from rich import print as pprint
 from rich.progress import BarColumn, Column, Progress, Table, TimeElapsedColumn
@@ -149,6 +150,7 @@ class WorkflowExecution:
             print("Unredirected headers:", req.unredirected_hdrs)
             resp = request.urlopen(req)
             body = json.loads(resp.read())
+            joblib.dump(req, "/output_media/req.joblib")
 
             self.prompt_id = body["prompt_id"]
         except urllib.error.HTTPError as e:
