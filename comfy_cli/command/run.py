@@ -13,6 +13,7 @@ import typer
 from rich import print as pprint
 from rich.progress import BarColumn, Column, Progress, Table, TimeElapsedColumn
 from websocket import WebSocket
+from loguru import logger
 
 from comfy_cli.env_checker import check_comfy_server_running
 from comfy_cli.workspace_manager import WorkspaceManager
@@ -138,6 +139,7 @@ class WorkflowExecution:
         data = {"prompt": self.workflow, "client_id": self.client_id}
         req = request.Request(f"http://{self.host}:{self.port}/prompt", json.dumps(data).encode("utf-8"))
         try:
+            logger.debug(f"Request: {req}")
             resp = request.urlopen(req)
             body = json.loads(resp.read())
 
