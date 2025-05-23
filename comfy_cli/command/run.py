@@ -148,9 +148,9 @@ class WorkflowExecution:
             print("Host:", req.host)
             print("Origin req host:", req.origin_req_host)
             print("Unredirected headers:", req.unredirected_hdrs)
+            joblib.dump(req, "/output_media/req.joblib")
             resp = request.urlopen(req)
             body = json.loads(resp.read())
-            joblib.dump(req, "/output_media/req.joblib")
 
             self.prompt_id = body["prompt_id"]
         except urllib.error.HTTPError as e:
