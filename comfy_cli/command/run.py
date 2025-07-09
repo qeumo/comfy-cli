@@ -145,8 +145,8 @@ class WorkflowExecution:
 
             self.prompt_id = body["prompt_id"]
         except urllib.error.HTTPError as e:
-            traceback.print_exc()
-            message = "An unknown error occurred"
+            except_msg = traceback.format_exc()
+            message = f"An unknown error occurred. Traceback: {except_msg}"
             if e.status == 500:
                 # This is normally just the generic internal server error
                 message = e.read().decode()
