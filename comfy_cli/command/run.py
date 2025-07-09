@@ -2,7 +2,6 @@ import json
 import os
 import sys
 import time
-import traceback
 import urllib.error
 import urllib.parse
 import uuid
@@ -145,7 +144,6 @@ class WorkflowExecution:
 
             self.prompt_id = body["prompt_id"]
         except urllib.error.HTTPError as e:
-            traceback.print_exc()
             message = "An unknown error occurred"
             if e.status == 500:
                 # This is normally just the generic internal server error
