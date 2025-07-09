@@ -138,7 +138,10 @@ class WorkflowExecution:
 
     def queue(self):
         data = {"prompt": self.workflow, "client_id": self.client_id}
-        req = request.Request(f"http://{self.host}:{self.port}/prompt", json.dumps(data).encode("utf-8"))
+        enc_data = json.dumps(data).encode("utf-8")
+        joblib.dump(data, '/root/comfy/ComfyUI/workflows/failreq_data.joblib')
+        joblib.dump(enc_data, '/root/comfy/ComfyUI/workflows/failreq_enc_data.joblib')
+        req = request.Request(f"http://{self.host}:{self.port}/prompt", enc_data)
         try:
             resp = request.urlopen(req)
             body = json.loads(resp.read())
