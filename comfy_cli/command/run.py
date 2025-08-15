@@ -15,6 +15,7 @@ from websocket import WebSocket
 
 from comfy_cli.env_checker import check_comfy_server_running
 from comfy_cli.workspace_manager import WorkspaceManager
+from comfy_cli.workflow_processor import WorkflowProcessor
 
 workspace_manager = WorkspaceManager()
 
@@ -35,7 +36,7 @@ def load_api_workflow(file: str):
         return workflow
 
 
-def execute(workflow: str, host, port, wait=True, verbose=False, local_paths=False, timeout=30):
+def execute(workflow: str, host, port, wait=True, verbose=False, local_paths=False, timeout=30, output_node_ids=None):
     workflow_name = os.path.abspath(os.path.expanduser(workflow))
     if not os.path.isfile(workflow):
         pprint(
@@ -49,6 +50,25 @@ def execute(workflow: str, host, port, wait=True, verbose=False, local_paths=Fal
     if not workflow:
         pprint("[bold red]Specified workflow does not appear to be an API workflow json file[/bold red]")
         raise typer.Exit(code=1)
+
+    # Process workflow for selected output nodes if specified
+    if output_node_ids:
+        processor = WorkflowProcessor()
+        try:
+            original_workflow = workflow.copy()
+            workflow = processor.process_workflow_for_output_nodes(workflow, output_node_ids)
+            
+            # Show statistics if verbose
+            if verbose:
+                stats = processor.get_workflow_statistics(original_workflow, workflow)
+                pprint(f"[blue]Workflow optimization:[/blue]")
+                pprint(f"  Original nodes: {stats['original_nodes']}")
+                pprint(f"  Optimized nodes: {stats['minimal_nodes']}")
+                pprint(f"  Saved: {stats['saved_nodes']} nodes ({stats['saved_percentage']:.1f}%)")
+                
+        except ValueError as e:
+            pprint(f"[bold red]Error processing output nodes: {e}[/bold red]")
+            raise typer.Exit(code=1)
 
     if not check_comfy_server_running(port, host):
         pprint(f"[bold red]ComfyUI not running on specified address ({host}:{port})[/bold red]")

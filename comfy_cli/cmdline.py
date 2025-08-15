@@ -428,6 +428,10 @@ def run(
         Optional[int],
         typer.Option(help="The timeout in seconds for the workflow execution."),
     ] = 30,
+    output_nodes: Annotated[
+        Optional[str],
+        typer.Option(help="Comma-separated list of output node IDs to execute. Only these nodes and their dependencies will run."),
+    ] = None,
 ):
     config = ConfigManager()
 
@@ -452,7 +456,12 @@ def run(
     if not port:
         port = 8188
 
-    run_inner.execute(workflow, host, port, wait, verbose, local_paths, timeout)
+    # Parse output nodes if provided
+    output_node_ids = None
+    if output_nodes:
+        output_node_ids = [node_id.strip() for node_id in output_nodes.split(',')]
+    
+    run_inner.execute(workflow, host, port, wait, verbose, local_paths, timeout, output_node_ids)
 
 
 def validate_comfyui(_env_checker):
