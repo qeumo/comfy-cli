@@ -266,13 +266,22 @@ async def launch_and_monitor(cmd, listen, port):
             if not line:  # End of stream
                 break
             
-            # Debug: print all lines to see what's happening
-            sys.stderr.write(f"DEBUG: {line.strip()}\n")
-            sys.stderr.flush()
+            # Debug: print all lines to see what's happening (controlled by env var)
+            if 1:
+                sys.stderr.write(f"DEBUG: {line.strip()}\n")
+                sys.stderr.flush()
             
             if "Launching ComfyUI from:" in line:
                 logging_flag = True
-            elif "To see the GUI go to:" in line or "web root:" in line:
+            elif any(success_indicator in line for success_indicator in [
+                "To see the GUI go to:",
+                "web root:",
+                "Starting server",
+                "Model loaded",
+                "Server started",
+                "Starting server on:",
+                "Application startup complete"
+            ]):
                 print(
                     f"[bold yellow]ComfyUI is successfully launched in the background.[/bold yellow]\nTo see the GUI go to: http://{listen}:{port}"
                 )
@@ -293,28 +302,62 @@ async def launch_and_monitor(cmd, listen, port):
     stdout_thread.start()
     stderr_thread.start()
     
-    print(f"DEBUG: Started monitoring threads - stdout: {stdout_thread.is_alive()}, stderr: {stderr_thread.is_alive()}")
+    if 1:
+        print(f"DEBUG: Started monitoring threads - stdout: {stdout_thread.is_alive()}, stderr: {stderr_thread.is_alive()}")
 
     # Wait for either success signal or process termination with timeout
-    timeout_seconds = 120  # 2 minutes timeout
+    timeout_seconds = 180  # 3 minutes timeout for server environments
     elapsed = 0
+    port_check_interval = 30  # Check port every 30 seconds after initial startup
     
-    print(f"DEBUG: Starting monitoring loop, PID: {process.pid}")
+    if 1:
+        print(f"DEBUG: Starting monitoring loop, PID: {process.pid}")
     
     while not success_event.is_set() and elapsed < timeout_seconds:
         if process.poll() is not None:  # Process has terminated
-            print(f"DEBUG: Process terminated with return code {process.returncode}")
+            if 1:
+                print(f"DEBUG: Process terminated with return code {process.returncode}")
             break
-        if elapsed % 10 == 0:  # Print status every 10 seconds
-            print(f"DEBUG: Still waiting... {elapsed}s elapsed")
-        await asyncio.sleep(1.0)  # Increase to 1 second intervals
+            
+        # Check if ComfyUI port is listening (server might be ready even without explicit message)
+        if elapsed >= port_check_interval and elapsed % 10 == 0:
+            try:
+                import socket
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.settimeout(1.0)
+                result = sock.connect_ex((listen if listen != "0.0.0.0" else "127.0.0.1", int(port)))
+                sock.close()
+                
+                if result == 0:  # Port is open
+                    if 1:
+                        print(f"DEBUG: Port {port} is listening, assuming ComfyUI is ready")
+                    print(
+                        f"[bold yellow]ComfyUI is successfully launched in the background.[/bold yellow]\nTo see the GUI go to: http://{listen}:{port}"
+                    )
+                    ConfigManager().config["DEFAULT"][constants.CONFIG_KEY_BACKGROUND] = f"{(listen, port, process.pid)}"
+                    ConfigManager().write_config()
+                    success_event.set()
+                    break
+                else:
+                    if 1:
+                        print(f"DEBUG: Port {port} not yet listening (elapsed: {elapsed}s)")
+            except Exception as e:
+                if 1:
+                    print(f"DEBUG: Port check failed: {e}")
+                
+        if elapsed % 15 == 0:  # Print status every 15 seconds
+            if 1:
+                print(f"DEBUG: Still waiting... {elapsed}s elapsed")
+        await asyncio.sleep(1.0)
         elapsed += 1.0
     
-    if elapsed >= timeout_seconds:
-        print("DEBUG: Timeout reached, killing process")
+    if elapsed >= timeout_seconds and not success_event.is_set():
+        if 1:
+            print("DEBUG: Timeout reached, killing process")
         process.terminate()
     
-    print("DEBUG: Exiting monitoring loop")
+    if 1:
+        print("DEBUG: Exiting monitoring loop")
 
     # Wait for threads to finish reading any remaining output
     stdout_thread.join(timeout=1.0)
