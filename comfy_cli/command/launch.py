@@ -67,18 +67,23 @@ def launch_comfyui(extra, frontend_pr=None):
             os.remove(reboot_path)
     else:
         # If running in background mode without using a popen, broken pipe errors may occur when flushing stdout/stderr.
-        def redirector_stderr():
+        def redirector_stderr(proc):
             while True:
-                if process is not None:
-                    print(process.stderr.readline(), end="")
+                line = proc.stderr.readline()
+                if not line:  # End of stream
+                    break
+                # Use sys.stderr.write to avoid Rich markup parsing
+                sys.stderr.write(line)
+                sys.stderr.flush()
 
-        def redirector_stdout():
+        def redirector_stdout(proc):
             while True:
-                if process is not None:
-                    print(process.stdout.readline(), end="")
-
-        threading.Thread(target=redirector_stderr).start()
-        threading.Thread(target=redirector_stdout).start()
+                line = proc.stdout.readline()
+                if not line:  # End of stream
+                    break
+                # Use sys.stdout.write to avoid Rich markup parsing
+                sys.stdout.write(line)
+                sys.stdout.flush()
 
         try:
             while True:
@@ -102,6 +107,10 @@ def launch_comfyui(extra, frontend_pr=None):
                         stdout=subprocess.PIPE,
                         stderr=subprocess.PIPE,
                     )
+
+                # Start redirector threads AFTER process is created
+                threading.Thread(target=redirector_stderr, args=(process,)).start()
+                threading.Thread(target=redirector_stdout, args=(process,)).start()
 
                 process.wait()
 
@@ -221,6 +230,7 @@ async def launch_and_monitor(cmd, listen, port):
     logging_flag = False
     log = []
     logging_lock = threading.Lock()
+    success_event = threading.Event()
 
     # NOTE: To prevent encoding error on Windows platform
     env = dict(os.environ, PYTHONIOENCODING="utf-8")
@@ -253,16 +263,24 @@ async def launch_and_monitor(cmd, listen, port):
 
         while True:
             line = stream.readline()
+            if not line:  # End of stream
+                break
+            
+            # Debug: print all lines to see what's happening
+            sys.stderr.write(f"DEBUG: {line.strip()}\n")
+            sys.stderr.flush()
+            
             if "Launching ComfyUI from:" in line:
                 logging_flag = True
-            elif "To see the GUI go to:" in line:
+            elif "To see the GUI go to:" in line or "web root:" in line:
                 print(
                     f"[bold yellow]ComfyUI is successfully launched in the background.[/bold yellow]\nTo see the GUI go to: http://{listen}:{port}"
                 )
                 ConfigManager().config["DEFAULT"][constants.CONFIG_KEY_BACKGROUND] = f"{(listen, port, process.pid)}"
                 ConfigManager().write_config()
 
-                # NOTE: os.exit(0) doesn't work.
+                # Signal success and exit
+                success_event.set()
                 os._exit(0)
 
             with logging_lock:
@@ -274,7 +292,32 @@ async def launch_and_monitor(cmd, listen, port):
 
     stdout_thread.start()
     stderr_thread.start()
+    
+    print(f"DEBUG: Started monitoring threads - stdout: {stdout_thread.is_alive()}, stderr: {stderr_thread.is_alive()}")
 
-    process.wait()
+    # Wait for either success signal or process termination with timeout
+    timeout_seconds = 120  # 2 minutes timeout
+    elapsed = 0
+    
+    print(f"DEBUG: Starting monitoring loop, PID: {process.pid}")
+    
+    while not success_event.is_set() and elapsed < timeout_seconds:
+        if process.poll() is not None:  # Process has terminated
+            print(f"DEBUG: Process terminated with return code {process.returncode}")
+            break
+        if elapsed % 10 == 0:  # Print status every 10 seconds
+            print(f"DEBUG: Still waiting... {elapsed}s elapsed")
+        await asyncio.sleep(1.0)  # Increase to 1 second intervals
+        elapsed += 1.0
+    
+    if elapsed >= timeout_seconds:
+        print("DEBUG: Timeout reached, killing process")
+        process.terminate()
+    
+    print("DEBUG: Exiting monitoring loop")
+
+    # Wait for threads to finish reading any remaining output
+    stdout_thread.join(timeout=1.0)
+    stderr_thread.join(timeout=1.0)
 
     return log
