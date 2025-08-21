@@ -12,6 +12,19 @@ from rich import print
 from rich.console import Console
 from rich.panel import Panel
 
+def safe_print(*args, **kwargs):
+    """Safe print function that handles Rich markup errors gracefully"""
+    try:
+        print(*args, **kwargs)
+    except Exception as e:
+        # If Rich fails, fall back to regular print
+        import builtins
+        # Convert args to strings and print without markup
+        safe_args = [str(arg) for arg in args]
+        builtins.print(*safe_args, **{k: v for k, v in kwargs.items() if k not in ['markup']})
+        if os.environ.get("COMFY_CLI_DEBUG_LAUNCH"):
+            builtins.print(f"DEBUG: Rich markup error ignored: {e}")
+
 from comfy_cli import constants, utils
 from comfy_cli.config_manager import ConfigManager
 from comfy_cli.env_checker import check_comfy_server_running
@@ -72,18 +85,26 @@ def launch_comfyui(extra, frontend_pr=None):
                 line = proc.stderr.readline()
                 if not line:  # End of stream
                     break
-                # Use sys.stderr.write to avoid Rich markup parsing
-                sys.stderr.write(line)
-                sys.stderr.flush()
+                # Use safe_print to handle Rich markup errors gracefully
+                try:
+                    safe_print(line, end="")
+                except Exception as e:
+                    # If even safe_print fails, use basic write
+                    sys.stderr.write(line)
+                    sys.stderr.flush()
 
         def redirector_stdout(proc):
             while True:
                 line = proc.stdout.readline()
                 if not line:  # End of stream
                     break
-                # Use sys.stdout.write to avoid Rich markup parsing
-                sys.stdout.write(line)
-                sys.stdout.flush()
+                # Use safe_print to handle Rich markup errors gracefully  
+                try:
+                    safe_print(line, end="")
+                except Exception as e:
+                    # If even safe_print fails, use basic write
+                    sys.stdout.write(line)
+                    sys.stdout.flush()
 
         try:
             while True:
@@ -282,7 +303,7 @@ async def launch_and_monitor(cmd, listen, port):
                 "Starting server on:",
                 "Application startup complete"
             ]):
-                print(
+                safe_print(
                     f"[bold yellow]ComfyUI is successfully launched in the background.[/bold yellow]\nTo see the GUI go to: http://{listen}:{port}"
                 )
                 ConfigManager().config["DEFAULT"][constants.CONFIG_KEY_BACKGROUND] = f"{(listen, port, process.pid)}"
@@ -331,7 +352,7 @@ async def launch_and_monitor(cmd, listen, port):
                 if result == 0:  # Port is open
                     if 1:
                         print(f"DEBUG: Port {port} is listening, assuming ComfyUI is ready")
-                    print(
+                    safe_print(
                         f"[bold yellow]ComfyUI is successfully launched in the background.[/bold yellow]\nTo see the GUI go to: http://{listen}:{port}"
                     )
                     ConfigManager().config["DEFAULT"][constants.CONFIG_KEY_BACKGROUND] = f"{(listen, port, process.pid)}"
