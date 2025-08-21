@@ -170,7 +170,7 @@ def launch(
         if launch_extras != "":
             extra = launch_extras.split(" ")
 
-    print(f"\nLaunching ComfyUI from: {resolved_workspace}\n")
+    print(f"\nLaunching ComfyUI with qeumo comfy cli from: {resolved_workspace}\n")
 
     # Update the recent workspace
     workspace_manager.set_recent_workspace(resolved_workspace)
