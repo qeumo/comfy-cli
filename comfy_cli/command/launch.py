@@ -22,8 +22,7 @@ def safe_print(*args, **kwargs):
         # Convert args to strings and print without markup
         safe_args = [str(arg) for arg in args]
         builtins.print(*safe_args, **{k: v for k, v in kwargs.items() if k not in ['markup']})
-        if os.environ.get("COMFY_CLI_DEBUG_LAUNCH"):
-            builtins.print(f"DEBUG: Rich markup error ignored: {e}")
+        builtins.print(f"DEBUG: Rich markup error ignored: {e}")
 
 from comfy_cli import constants, utils
 from comfy_cli.config_manager import ConfigManager
