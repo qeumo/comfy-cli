@@ -295,12 +295,6 @@ async def launch_and_monitor(cmd, listen, port):
                 logging_flag = True
             elif any(success_indicator in line for success_indicator in [
                 "To see the GUI go to:",
-                "web root:",
-                "Starting server",
-                "Model loaded",
-                "Server started",
-                "Starting server on:",
-                "Application startup complete"
             ]):
                 safe_print(
                     f"[bold yellow]ComfyUI is successfully launched in the background.[/bold yellow]\nTo see the GUI go to: http://{listen}:{port}"
