@@ -293,6 +293,8 @@ async def launch_and_monitor(cmd, listen, port):
             
             if "Launching ComfyUI from:" in line:
                 logging_flag = True
+            elif "IMPORT FAILED" in line:
+                raise Exception(f"IMPORT FAILED: {line}")
             elif any(success_indicator in line for success_indicator in [
                 "To see the GUI go to:",
             ]):
