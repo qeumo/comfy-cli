@@ -161,19 +161,48 @@ class WorkflowExecution:
 
             self.prompt_id = body["prompt_id"]
         except urllib.error.HTTPError as e:
-            message = "An unknown error occurred"
-            if e.status == 500:
-                # This is normally just the generic internal server error
-                message = e.read().decode()
-            elif e.status == 400:
-                # Bad Request - workflow failed validation on the server
-                body = json.loads(e.read())
-                if body["node_errors"].keys():
-                    message = json.dumps(body["node_errors"], indent=2)
+            # Surface EVERYTHING we know: status, body, parsed node_errors.
+            # The previous behavior printed "An unknown error occurred" for any
+            # status other than 400/500 and dropped the raw response body —
+            # impossible to debug remote sweeps. Now: always show the body, and
+            # try to parse node_errors when present.
+            raw_body = ""
+            try:
+                raw_body = e.read().decode("utf-8", errors="replace")
+            except Exception as read_err:
+                raw_body = f"(failed to read response body: {read_err!r})"
+
+            parsed = ""
+            try:
+                body_json = json.loads(raw_body) if raw_body else {}
+                if isinstance(body_json, dict) and body_json.get("node_errors"):
+                    parsed = "\nnode_errors:\n" + json.dumps(body_json["node_errors"], indent=2)
+                elif isinstance(body_json, dict) and body_json.get("error"):
+                    parsed = "\nerror:\n" + json.dumps(body_json["error"], indent=2)
+            except json.JSONDecodeError:
+                pass  # raw_body already captured
 
             self.progress.stop()
 
-            pprint(f"[bold red]Error running workflow\n{message}[/bold red]")
+            pprint(
+                f"[bold red]Error running workflow (HTTP {e.status} {e.reason})\n"
+                f"URL: {e.url}\n"
+                f"Body: {raw_body}{parsed}[/bold red]"
+            )
+            raise typer.Exit(code=1)
+        except urllib.error.URLError as e:
+            self.progress.stop()
+            pprint(
+                f"[bold red]Error running workflow (URLError contacting "
+                f"http://{self.host}:{self.port}/prompt): {e!r}[/bold red]"
+            )
+            raise typer.Exit(code=1)
+        except (json.JSONDecodeError, KeyError) as e:
+            self.progress.stop()
+            pprint(
+                f"[bold red]Error running workflow (bad /prompt response from server): "
+                f"{e!r}[/bold red]"
+            )
             raise typer.Exit(code=1)
 
     def watch_execution(self):

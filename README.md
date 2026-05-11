@@ -147,6 +147,61 @@ Comfy provides commands that allow you to easily run the installed ComfyUI.
   - Maximum of 10 PR builds are kept (oldest are removed automatically)
   - Cache limits help manage disk space while keeping recent builds available
 
+### Running Workflows
+
+Comfy provides a command to execute API workflow files programmatically against a running ComfyUI instance.
+
+`comfy run --workflow <workflow.json>`
+
+This command requires a ComfyUI instance to be running (e.g., via `comfy launch --background`).
+
+**Basic usage:**
+
+```bash
+# Run a workflow against the default background instance
+comfy run --workflow my_workflow.json
+
+# Run against a specific host/port
+comfy run --workflow my_workflow.json --host 127.0.0.1 --port 8188
+
+# Queue workflow without waiting for completion
+comfy run --workflow my_workflow.json --wait false
+
+# Show detailed execution progress
+comfy run --workflow my_workflow.json --verbose
+```
+
+**Selective Node Execution:**
+
+Use `--output-nodes` to execute only specific output nodes and their dependencies, which can significantly optimize execution time:
+
+```bash
+# Execute only specific output nodes (by node ID)
+comfy run --workflow my_workflow.json --output-nodes "123,456"
+
+# With verbose output to see optimization statistics
+comfy run --workflow my_workflow.json --output-nodes "10" --verbose
+```
+
+When using `--output-nodes`:
+- Provide a comma-separated list of node IDs you want to execute
+- Only the specified nodes and their dependencies will run
+- Other nodes in the workflow will be skipped
+- With `--verbose`, you'll see statistics showing how many nodes were optimized away
+- This is useful for testing specific parts of large workflows or when you only need certain outputs
+
+**Available options:**
+
+- `--workflow`: Path to the API workflow JSON file (required)
+- `--output-nodes`: Comma-separated list of output node IDs to execute (optional)
+- `--host`: IP/hostname where ComfyUI is running (default: 127.0.0.1)
+- `--port`: Port where ComfyUI is running (default: 8188)
+- `--wait`: Wait for execution to complete (default: true)
+- `--verbose`: Show detailed execution progress (default: false)
+- `--timeout`: Timeout in seconds for workflow execution (default: 30)
+
+**Note:** The workflow file must be in API format (JSON with node definitions), not the UI format (with "nodes" and "links" properties).
+
 ### Managing Custom Nodes
 
 comfy provides a convenient way to manage custom nodes for extending ComfyUI's functionality. Here are some examples:

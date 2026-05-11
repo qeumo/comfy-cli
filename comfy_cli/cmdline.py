@@ -404,7 +404,11 @@ def update(
     custom_nodes.command.update_node_id_cache()
 
 
-@app.command(help="Run API workflow file using the ComfyUI launched by `comfy launch --background`")
+@app.command(
+    help="Run API workflow file using ComfyUI instance. "
+         "Supports selective node execution with --output-nodes for optimized runs. "
+         "Requires a running ComfyUI instance (e.g., via `comfy launch --background`)."
+)
 @tracking.track_command()
 def run(
     workflow: Annotated[str, typer.Option(help="Path to the workflow API json file.")],
@@ -430,7 +434,11 @@ def run(
     ] = 30,
     output_nodes: Annotated[
         Optional[str],
-        typer.Option(help="Comma-separated list of output node IDs to execute. Only these nodes and their dependencies will run."),
+        typer.Option(
+            help="Comma-separated list of output node IDs to execute. Only these nodes and their dependencies will run. "
+                 "This optimizes execution by skipping unneeded nodes. Use --verbose to see optimization statistics. "
+                 "Example: --output-nodes '123,456' will execute only nodes 123 and 456 plus their dependencies."
+        ),
     ] = None,
 ):
     config = ConfigManager()
