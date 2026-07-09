@@ -36,7 +36,17 @@ def load_api_workflow(file: str):
         return workflow
 
 
-def execute(workflow: str, host, port, wait=True, verbose=False, local_paths=False, timeout=30, output_node_ids=None):
+def execute(
+    workflow: str,
+    host,
+    port,
+    wait=True,
+    verbose=False,
+    local_paths=False,
+    timeout=30,
+    output_node_ids=None,
+    allow_partial=False,
+):
     workflow_name = os.path.abspath(os.path.expanduser(workflow))
     if not os.path.isfile(workflow):
         pprint(
@@ -83,7 +93,9 @@ def execute(workflow: str, host, port, wait=True, verbose=False, local_paths=Fal
     else:
         print(f"Queuing workflow: {workflow_name}")
 
-    execution = WorkflowExecution(workflow, host, port, verbose, progress, local_paths, timeout)
+    execution = WorkflowExecution(
+        workflow, host, port, verbose, progress, local_paths, timeout, allow_partial
+    )
 
     try:
         if wait:
@@ -128,12 +140,13 @@ class ExecutionProgress(Progress):
 
 
 class WorkflowExecution:
-    def __init__(self, workflow, host, port, verbose, progress, local_paths, timeout=30):
+    def __init__(self, workflow, host, port, verbose, progress, local_paths, timeout=30, allow_partial=False):
         self.workflow = workflow
         self.host = host
         self.port = port
         self.verbose = verbose
         self.local_paths = local_paths
+        self.allow_partial = allow_partial
         self.client_id = str(uuid.uuid4())
         self.outputs = []
         self.progress = progress
@@ -160,6 +173,20 @@ class WorkflowExecution:
             body = json.loads(resp.read())
 
             self.prompt_id = body["prompt_id"]
+
+            # ComfyUI returns HTTP 200 + node_errors (NOT an error status) when an
+            # output branch fails validation but at least one valid OUTPUT_NODE
+            # remains: it silently prunes the invalid branch and executes only the
+            # surviving outputs. The previous behavior read prompt_id and dropped
+            # node_errors — a partially-executed graph looks like success, then
+            # downstream consumers die on the never-created artifact (LUS-660).
+            node_errors = body.get("node_errors") or {}
+            if node_errors:
+                self._report_node_errors(node_errors)
+                if not self.allow_partial:
+                    if self.progress:
+                        self.progress.stop()
+                    raise typer.Exit(code=1)
         except urllib.error.HTTPError as e:
             # Surface EVERYTHING we know: status, body, parsed node_errors.
             # The previous behavior printed "An unknown error occurred" for any
@@ -204,6 +231,49 @@ class WorkflowExecution:
                 f"{e!r}[/bold red]"
             )
             raise typer.Exit(code=1)
+
+    def _report_node_errors(self, node_errors):
+        """Print per-node validation errors from a 200 /prompt response (LUS-660).
+
+        node_errors maps node_id -> {"errors": [{"type","message","details",...}],
+        "class_type": "..."}. We enrich each with the title/class_type from the
+        submitted workflow so remote logs identify exactly which branch was pruned.
+        """
+        header = (
+            "[bold red]ComfyUI pruned invalid output branch(es) — /prompt returned 200 "
+            "with node_errors "
+            f"({'continuing: --allow-partial' if self.allow_partial else 'failing fast'}):[/bold red]"
+        )
+        pprint(header, file=sys.stderr)
+
+        for node_id, info in node_errors.items():
+            info = info or {}
+            class_type = info.get("class_type") or (
+                self.workflow.get(node_id, {}).get("class_type", "?")
+            )
+            title = class_type
+            try:
+                title = self.get_node_title(node_id)
+            except (KeyError, TypeError):
+                pass
+
+            pprint(
+                f"[bold red]  node {node_id} ({title} - {class_type}):[/bold red]",
+                file=sys.stderr,
+            )
+            errors = info.get("errors") or []
+            if errors:
+                for err in errors:
+                    etype = err.get("type", "error")
+                    emsg = err.get("message", "")
+                    details = err.get("details", "")
+                    line = f"    - {etype}: {emsg}"
+                    if details:
+                        line += f" ({details})"
+                    pprint(f"[red]{line}[/red]", file=sys.stderr)
+            else:
+                # Fall back to dumping the raw info if the shape is unexpected.
+                pprint(f"[red]    {json.dumps(info)}[/red]", file=sys.stderr)
 
     def watch_execution(self):
         self.ws.settimeout(self.timeout)

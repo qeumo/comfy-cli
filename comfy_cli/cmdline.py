@@ -440,6 +440,15 @@ def run(
                  "Example: --output-nodes '123,456' will execute only nodes 123 and 456 plus their dependencies."
         ),
     ] = None,
+    allow_partial: Annotated[
+        bool,
+        typer.Option(
+            "--allow-partial/--no-allow-partial",
+            help="If ComfyUI returns HTTP 200 with node_errors (an invalid output branch was "
+                 "silently pruned), continue executing the surviving outputs instead of failing. "
+                 "Default: fail fast (exit non-zero) so partial execution is never mistaken for success."
+        ),
+    ] = False,
 ):
     config = ConfigManager()
 
@@ -469,7 +478,7 @@ def run(
     if output_nodes:
         output_node_ids = [node_id.strip() for node_id in output_nodes.split(',')]
     
-    run_inner.execute(workflow, host, port, wait, verbose, local_paths, timeout, output_node_ids)
+    run_inner.execute(workflow, host, port, wait, verbose, local_paths, timeout, output_node_ids, allow_partial)
 
 
 def validate_comfyui(_env_checker):
