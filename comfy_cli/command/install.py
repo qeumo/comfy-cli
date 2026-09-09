@@ -472,6 +472,38 @@ def clone_comfyui(url: str, repo_dir: str):
         subprocess.run(["git", "clone", url, repo_dir], check=True)
 
 
+def find_tag_for_version(repo_dir: str, version: str) -> Optional[str]:
+    """
+    Find a git tag matching `version` in the already-cloned repository.
+
+    ComfyUI pushes the version tag before publishing the matching GitHub release,
+    so the releases API 404s on a version that is perfectly installable from the
+    tag (v0.35.0 was tagged 2026-09 with no release). Fallback for
+    checkout_stable_comfyui, which otherwise refuses to install such a version.
+
+    :return: The matching tag name, or None if no tag matches.
+    """
+    bare = version.lstrip("v")
+
+    try:
+        subprocess.run(
+            ["git", "fetch", "--tags"], cwd=repo_dir, check=True, capture_output=True, text=True
+        )
+        result = subprocess.run(
+            ["git", "tag", "--list"], cwd=repo_dir, check=True, capture_output=True, text=True
+        )
+    except (subprocess.CalledProcessError, OSError):
+        # Non-zero git exit, or repo_dir missing/unreadable.
+        return None
+
+    tags = set(result.stdout.split())
+    # Both spellings: ComfyUI uses "v0.35.0", other repos ship bare "0.35.0".
+    for candidate in (f"v{bare}", bare):
+        if candidate in tags:
+            return candidate
+    return None
+
+
 def checkout_stable_comfyui(version: str, repo_dir: str):
     """
     Supports installing stable releases of Comfy (semantic versioning) or the 'latest' version.
@@ -486,13 +518,17 @@ def checkout_stable_comfyui(version: str, repo_dir: str):
         selected_release = select_version(parsed_releases, version)
 
     if selected_release is None:
-        rprint(f"Error: No release found for version '{version}'.")
-        sys.exit(1)
-
-    tag = str(selected_release["tag"])
+        # No published release: fall back to a git tag of the same version.
+        tag = find_tag_for_version(repo_dir, version) if version != "latest" else None
+        if tag is None:
+            rprint(f"Error: No release or tag found for version '{version}'.")
+            sys.exit(1)
+        rprint(f"No GitHub release for '{version}', falling back to git tag '{tag}'.")
+    else:
+        tag = str(selected_release["tag"])
     console.print(
         Panel(
-            f"Checking out ComfyUI version: [bold cyan]{selected_release['tag']}[/bold cyan]",
+            f"Checking out ComfyUI version: [bold cyan]{tag}[/bold cyan]",
             title="[yellow]ComfyUI Checkout[/yellow]",
             border_style="green",
             expand=False,
